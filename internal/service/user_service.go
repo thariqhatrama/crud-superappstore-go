@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"time"
 
 	"FinalTask/internal/models"
 	"FinalTask/internal/repository"
@@ -10,13 +11,13 @@ import (
 
 // UpdateUserRequest represents payload for updating user profile
 type UpdateUserRequest struct {
-	Nama         string
-	TanggalLahir string
-	JenisKelamin string
-	Tentang      string
-	Pekerjaan    string
-	IDProvinsi   string
-	IDKota       string
+	Nama         string `json:"nama"`
+	TanggalLahir string `json:"tanggal_lahir"` // expects "YYYY-MM-DD"
+	JenisKelamin string `json:"jenis_kelamin"`
+	Tentang      string `json:"tentang"`
+	Pekerjaan    string `json:"pekerjaan"`
+	IDProvinsi   string `json:"id_provinsi"`
+	IDKota       string `json:"id_kota"`
 }
 
 // UserService defines methods for user profile management
@@ -48,15 +49,27 @@ func (s *userService) Update(ctx context.Context, id uint, req UpdateUserRequest
 		return nil, errors.New("user not found")
 	}
 
-	// Apply updates
+	// Update basic fields
 	user.Nama = req.Nama
-	// user.TanggalLahir = req.TanggalLahir
 	user.JenisKelamin = req.JenisKelamin
 	user.Tentang = req.Tentang
 	user.Pekerjaan = req.Pekerjaan
 	user.IDProvinsi = req.IDProvinsi
 	user.IDKota = req.IDKota
 
+	// Parse and update TanggalLahir if non-empty
+	if req.TanggalLahir != "" {
+		parsed, perr := time.Parse("2006-01-02", req.TanggalLahir)
+		if perr != nil {
+			return nil, errors.New("invalid tanggal_lahir format, expected YYYY-MM-DD")
+		}
+		user.TanggalLahir = &parsed
+	}
+
+	// Update UpdatedAt timestamp
+	user.UpdatedAt = time.Now()
+
+	// Persist changes
 	if err := s.repo.Update(ctx, user); err != nil {
 		return nil, err
 	}

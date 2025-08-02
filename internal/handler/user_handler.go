@@ -28,13 +28,25 @@ func (h *UserHandler) GetProfile(c *fiber.Ctx) error {
 
 func (h *UserHandler) UpdateProfile(c *fiber.Ctx) error {
 	userID := c.Locals("user_id").(uint)
+
 	var req service.UpdateUserRequest
 	if err := c.BodyParser(&req); err != nil {
-		return fiber.ErrBadRequest
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "fail",
+			"message": "invalid request payload",
+		})
 	}
+
 	updated, err := h.UserService.Update(c.Context(), userID, req)
 	if err != nil {
-		return fiber.ErrBadRequest
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "fail",
+			"message": err.Error(),
+		})
 	}
-	return c.JSON(updated)
+
+	return c.JSON(fiber.Map{
+		"status": "success",
+		"data":   fiber.Map{"user": updated},
+	})
 }
