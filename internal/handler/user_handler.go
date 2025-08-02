@@ -28,7 +28,6 @@ func (h *UserHandler) GetProfile(c *fiber.Ctx) error {
 
 func (h *UserHandler) UpdateProfile(c *fiber.Ctx) error {
 	userID := c.Locals("user_id").(uint)
-
 	var req service.UpdateUserRequest
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -37,16 +36,20 @@ func (h *UserHandler) UpdateProfile(c *fiber.Ctx) error {
 		})
 	}
 
-	updated, err := h.UserService.Update(c.Context(), userID, req)
+	res, err := h.UserService.Update(c.Context(), userID, req)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"status":  "fail",
 			"message": err.Error(),
 		})
 	}
-
+	// kembalikan ProvinceName & CityName
 	return c.JSON(fiber.Map{
 		"status": "success",
-		"data":   fiber.Map{"user": updated},
+		"data": fiber.Map{
+			"user":          res.User,
+			"province_name": res.ProvinceName,
+			"city_name":     res.CityName,
+		},
 	})
 }
