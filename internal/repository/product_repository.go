@@ -15,9 +15,13 @@ type ProductRepository interface {
 	FindByID(ctx context.Context, id uint) (*models.Produk, error)
 	Update(ctx context.Context, prod *models.Produk) error
 	Delete(ctx context.Context, id uint) error
+
 	CreatePhoto(ctx context.Context, photo *models.FotoProduk) error
 
-	// Added for transactions
+	// **Tambah** CreateLog:
+	CreateLog(ctx context.Context, log *models.LogProduk) error
+
+	// untuk transaksi
 	FindLogByID(ctx context.Context, logID uint) (*models.LogProduk, error)
 	UpdateStock(ctx context.Context, produkID uint, qty int) error
 }
@@ -30,6 +34,10 @@ func NewProductRepository() ProductRepository {
 
 func (r *productRepo) Create(ctx context.Context, prod *models.Produk) error {
 	return config.DB.WithContext(ctx).Create(prod).Error
+}
+
+func (r *productRepo) CreateLog(ctx context.Context, log *models.LogProduk) error {
+	return config.DB.WithContext(ctx).Create(log).Error
 }
 
 func (r *productRepo) List(ctx context.Context, offset, limit int, categoryID uint) ([]*models.Produk, error) {

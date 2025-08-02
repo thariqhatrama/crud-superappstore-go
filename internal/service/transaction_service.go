@@ -7,17 +7,20 @@ import (
 	"strconv"
 	"time"
 
+	"FinalTask/config"
 	"FinalTask/internal/models"
 	"FinalTask/internal/repository"
+
+	"gorm.io/gorm"
 )
 
 type CreateTransactionRequest struct {
-	AlamatPengiriman uint
+	AlamatPengiriman uint `json:"alamat_pengiriman"`
 	Items            []struct {
-		LogProdukID uint
-		Kuantitas   int
-	}
-	MethodBayar string
+		LogProdukID uint `json:"log_produk_id"`
+		Kuantitas   int  `json:"kuantitas"`
+	} `json:"items"`
+	MethodBayar string `json:"method_bayar"`
 }
 
 type TransactionService interface {
@@ -42,58 +45,75 @@ func NewTransactionService(
 }
 
 func (s *transactionService) Create(ctx context.Context, userID uint, req CreateTransactionRequest) (*models.Trx, error) {
-	// 1. Buat header transaksi
-	trx := &models.Trx{
-		IDUser:           userID,
-		AlamatPengiriman: req.AlamatPengiriman,
-		MethodBayar:      req.MethodBayar,
-		CreatedAt:        time.Now(),
-		UpdatedAt:        time.Now(),
-	}
-	if err := s.trxRepo.Create(ctx, trx); err != nil {
+	var result *models.Trx
+
+	err := config.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// 1. Generate kode invoice unik
+		invoiceCode := fmt.Sprintf("INV-%d-%d", time.Now().UnixNano(), userID)
+
+		now := time.Now()
+		trx := &models.Trx{
+			IDUser:           userID,
+			AlamatPengiriman: req.AlamatPengiriman,
+			MethodBayar:      req.MethodBayar,
+			KodeInvoice:      invoiceCode,
+			CreatedAt:        now,
+			UpdatedAt:        now,
+		}
+		// simpan header transaksi
+		if err := tx.Create(trx).Error; err != nil {
+			return err
+		}
+
+		total := 0
+		// 2. Proses tiap item
+		for _, item := range req.Items {
+			// baca snapshot log produk
+			logEntry, err := s.productRepo.FindLogByID(ctx, item.LogProdukID)
+			if err != nil {
+				return err
+			}
+			price, err := strconv.Atoi(logEntry.HargaKonsumen)
+			if err != nil {
+				return fmt.Errorf("invalid harga konsumen: %v", err)
+			}
+
+			// buat detail transaksi
+			detail := &models.DetailTrx{
+				IDTrx:       trx.ID,
+				IDLogProduk: logEntry.ID,
+				IDToko:      logEntry.IDToko,
+				Kuantitas:   item.Kuantitas,
+				HargaTotal:  item.Kuantitas * price,
+				CreatedAt:   time.Now(),
+				UpdatedAt:   time.Now(),
+			}
+			if err := tx.Create(detail).Error; err != nil {
+				return err
+			}
+			total += detail.HargaTotal
+
+			// kurangi stok di produk
+			if err := s.productRepo.UpdateStock(ctx, logEntry.IDProduk, item.Kuantitas); err != nil {
+				return err
+			}
+		}
+
+		// 3. Update total harga dan timestamp
+		trx.HargaTotal = total
+		trx.UpdatedAt = time.Now()
+		if err := tx.Save(trx).Error; err != nil {
+			return err
+		}
+
+		result = trx
+		return nil
+	})
+
+	if err != nil {
 		return nil, err
 	}
-
-	total := 0
-	// 2. Proses setiap item: baca log, simpan detail, update stok
-	for _, item := range req.Items {
-		logEntry, err := s.productRepo.FindLogByID(ctx, item.LogProdukID)
-		if err != nil {
-			return nil, err
-		}
-		price, err := strconv.Atoi(logEntry.HargaKonsumen)
-		if err != nil {
-			return nil, fmt.Errorf("invalid harga konsumen: %v", err)
-		}
-
-		detail := &models.DetailTrx{
-			IDTrx:       trx.ID,
-			IDLogProduk: logEntry.ID,
-			IDToko:      logEntry.IDToko,
-			Kuantitas:   item.Kuantitas,
-			HargaTotal:  item.Kuantitas * price,
-			CreatedAt:   time.Now(),
-			UpdatedAt:   time.Now(),
-		}
-		if err := s.trxRepo.CreateDetail(ctx, detail); err != nil {
-			return nil, err
-		}
-		total += detail.HargaTotal
-
-		// Kurangi stok produk
-		if err := s.productRepo.UpdateStock(ctx, logEntry.IDProduk, item.Kuantitas); err != nil {
-			return nil, err
-		}
-	}
-
-	// 3. Update total & kode invoice
-	trx.HargaTotal = total
-	trx.KodeInvoice = fmt.Sprintf("INV-%d", trx.ID)
-	if err := s.trxRepo.Update(ctx, trx); err != nil {
-		return nil, err
-	}
-
-	return trx, nil
+	return result, nil
 }
 
 func (s *transactionService) List(ctx context.Context, userID uint, qs map[string]string) ([]*models.Trx, error) {
@@ -104,6 +124,7 @@ func (s *transactionService) List(ctx context.Context, userID uint, qs map[strin
 	if l, ok := qs["limit"]; ok {
 		fmt.Sscanf(l, "%d", &limit)
 	}
+	// ListByUserID should preload DetailTrx and related
 	return s.trxRepo.ListByUserID(ctx, userID, (page-1)*limit, limit)
 }
 

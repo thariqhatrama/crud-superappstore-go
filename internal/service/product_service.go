@@ -53,21 +53,21 @@ func NewProductService(
 }
 
 func (s *productService) Create(ctx context.Context, userID uint, req CreateProductRequest) (*models.Produk, error) {
-	// Validasi toko user
+	// 1. Validasi toko user
 	store, err := s.storeRepo.FindByUserID(ctx, userID)
 	if err != nil {
 		return nil, errors.New("store not found for user")
 	}
-	// Validasi kategori
+	// 2. Validasi kategori
 	if _, err := s.categoryRepo.FindByID(ctx, req.IDCategory); err != nil {
 		return nil, errors.New("category not found")
 	}
-	// Generate slug jika kosong
+	// 3. Generate slug jika kosong
 	slug := req.Slug
 	if slug == "" {
 		slug = fmt.Sprintf("%s-%d", req.NamaProduk, time.Now().Unix())
 	}
-
+	// 4. Buat produk master
 	prod := &models.Produk{
 		NamaProduk:    req.NamaProduk,
 		Slug:          slug,
@@ -80,18 +80,32 @@ func (s *productService) Create(ctx context.Context, userID uint, req CreateProd
 		CreatedAt:     time.Now(),
 		UpdatedAt:     time.Now(),
 	}
-
 	if err := s.repo.Create(ctx, prod); err != nil {
+		return nil, err
+	}
+	// 5. Buat initial log_produk snapshot
+	log := &models.LogProduk{
+		IDProduk:      prod.ID,
+		NamaProduk:    prod.NamaProduk,
+		Slug:          prod.Slug,
+		HargaReseller: prod.HargaReseller,
+		HargaKonsumen: prod.HargaKonsumen,
+		Deskripsi:     prod.Deskripsi,
+		IDToko:        prod.IDToko,
+		IDCategory:    prod.IDCategory,
+		StokAwal:      prod.Stok,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+	}
+	if err := s.repo.CreateLog(ctx, log); err != nil {
 		return nil, err
 	}
 	return prod, nil
 }
 
 func (s *productService) List(ctx context.Context, qs map[string]string) ([]*models.Produk, error) {
-	page := 1
-	limit := 10
-	category := uint(0)
-
+	page, limit := 1, 10
+	var category uint
 	if v, ok := qs["page"]; ok {
 		if p, err := strconv.Atoi(v); err == nil {
 			page = p
@@ -102,12 +116,11 @@ func (s *productService) List(ctx context.Context, qs map[string]string) ([]*mod
 			limit = l
 		}
 	}
-	if v, ok := qs["id_kategori"]; ok {
+	if v, ok := qs["id_category"]; ok {
 		if c, err := strconv.Atoi(v); err == nil {
 			category = uint(c)
 		}
 	}
-
 	return s.repo.List(ctx, (page-1)*limit, limit, category)
 }
 
@@ -116,7 +129,7 @@ func (s *productService) GetByID(ctx context.Context, id uint) (*models.Produk, 
 }
 
 func (s *productService) Update(ctx context.Context, userID, id uint, req CreateProductRequest) (*models.Produk, error) {
-	// Ambil produk dan periksa kepemilikan
+	// 1. Ambil dan periksa produk
 	prod, err := s.repo.FindByID(ctx, id)
 	if err != nil {
 		return nil, errors.New("product not found")
@@ -125,11 +138,11 @@ func (s *productService) Update(ctx context.Context, userID, id uint, req Create
 	if err != nil || prod.IDToko != store.ID {
 		return nil, errors.New("unauthorized")
 	}
-	// Validasi kategori
+	// 2. Validasi kategori
 	if _, err := s.categoryRepo.FindByID(ctx, req.IDCategory); err != nil {
 		return nil, errors.New("category not found")
 	}
-
+	// 3. Terapkan perubahan
 	prod.NamaProduk = req.NamaProduk
 	if req.Slug != "" {
 		prod.Slug = req.Slug
@@ -140,7 +153,6 @@ func (s *productService) Update(ctx context.Context, userID, id uint, req Create
 	prod.Deskripsi = req.Deskripsi
 	prod.IDCategory = req.IDCategory
 	prod.UpdatedAt = time.Now()
-
 	if err := s.repo.Update(ctx, prod); err != nil {
 		return nil, err
 	}
@@ -148,19 +160,22 @@ func (s *productService) Update(ctx context.Context, userID, id uint, req Create
 }
 
 func (s *productService) Delete(ctx context.Context, userID, id uint) error {
+	// 1. Ambil produk
 	prod, err := s.repo.FindByID(ctx, id)
 	if err != nil {
 		return errors.New("product not found")
 	}
+	// 2. Cek kepemilikan
 	store, err := s.storeRepo.FindByUserID(ctx, userID)
 	if err != nil || prod.IDToko != store.ID {
 		return errors.New("unauthorized")
 	}
+	// 3. Hapus produk
 	return s.repo.Delete(ctx, id)
 }
 
 func (s *productService) UploadImage(ctx context.Context, id uint, file *multipart.FileHeader) (string, error) {
-	// 1. Simpan file
+	// 1. Simpan file di uploads/products
 	filename := fmt.Sprintf("%d_%s", id, filepath.Base(file.Filename))
 	dest := filepath.Join("uploads", "products", filename)
 	if err := os.MkdirAll(filepath.Dir(dest), os.ModePerm); err != nil {
@@ -180,7 +195,7 @@ func (s *productService) UploadImage(ctx context.Context, id uint, file *multipa
 		return "", err
 	}
 
-	// 2. Simpan record foto via ProductRepository
+	// 2. Simpan record foto ke DB
 	photo := &models.FotoProduk{
 		IDProduk:  id,
 		URL:       "/" + filepath.ToSlash(dest),
