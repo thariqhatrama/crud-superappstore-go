@@ -11,5 +11,5 @@ type FotoProduk struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 
-	Produk Produk `gorm:"foreignKey:IDProduk"`
+	Produk Produk `gorm:"foreignKey:IDProduk" json:"-"`
 }

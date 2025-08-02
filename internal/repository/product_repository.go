@@ -41,6 +41,9 @@ func (r *productRepo) List(ctx context.Context, offset, limit int, categoryID ui
 	err := db.Offset(offset).
 		Limit(limit).
 		Preload("FotoProduk").
+		Preload("Category").
+		Preload("Toko").
+		Preload("Toko.User").
 		Find(&list).Error
 	return list, err
 }
@@ -48,7 +51,12 @@ func (r *productRepo) List(ctx context.Context, offset, limit int, categoryID ui
 func (r *productRepo) FindByID(ctx context.Context, id uint) (*models.Produk, error) {
 	var prod models.Produk
 	err := config.DB.WithContext(ctx).
-		Preload("FotoProduk").
+		Preload("FotoProduk", func(db *gorm.DB) *gorm.DB {
+			return db.Omit("Produk")
+		}).
+		Preload("Category").
+		Preload("Toko").
+		Preload("Toko.User").
 		First(&prod, id).Error
 	return &prod, err
 }
