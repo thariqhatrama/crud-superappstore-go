@@ -24,7 +24,7 @@ type User struct {
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 
-	Alamat []*Alamat `gorm:"foreignKey:IDUser"`
-	Toko   *Toko     `gorm:"foreignKey:IDUser"`
-	Trx    []*Trx    `gorm:"foreignKey:IDUser"`
+	Alamat      []*Alamat `gorm:"foreignKey:IDUser"`
+	Toko        *Toko     `gorm:"foreignKey:IDUser"`
+	Trx         []*Trx    `gorm:"foreignKey:IDUser"`
 }
