@@ -5,6 +5,8 @@ import (
 
 	"FinalTask/config"
 	"FinalTask/internal/models"
+
+	"gorm.io/gorm"
 )
 
 type StoreRepository interface {
@@ -29,6 +31,10 @@ func NewStoreRepository() StoreRepository {
 func (r *storeRepo) FindByUserID(ctx context.Context, userID uint) (*models.Toko, error) {
 	var store models.Toko
 	err := config.DB.WithContext(ctx).
+		Preload("Produk", func(db *gorm.DB) *gorm.DB {
+			return db.Preload("FotoProduk")
+		}).
+		Preload("User").
 		Where("id_user = ?", userID).
 		First(&store).Error
 	return &store, err
@@ -37,6 +43,10 @@ func (r *storeRepo) FindByUserID(ctx context.Context, userID uint) (*models.Toko
 func (r *storeRepo) FindByID(ctx context.Context, id uint) (*models.Toko, error) {
 	var store models.Toko
 	err := config.DB.WithContext(ctx).
+		Preload("Produk", func(db *gorm.DB) *gorm.DB {
+			return db.Preload("FotoProduk")
+		}).
+		Preload("User").
 		First(&store, id).Error
 	return &store, err
 }
@@ -44,6 +54,10 @@ func (r *storeRepo) FindByID(ctx context.Context, id uint) (*models.Toko, error)
 func (r *storeRepo) List(ctx context.Context) ([]*models.Toko, error) {
 	var stores []*models.Toko
 	err := config.DB.WithContext(ctx).
+		Preload("Produk", func(db *gorm.DB) *gorm.DB {
+			return db.Preload("FotoProduk")
+		}).
+		Preload("User").
 		Find(&stores).Error
 	return stores, err
 }
