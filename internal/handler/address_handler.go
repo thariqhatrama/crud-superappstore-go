@@ -162,7 +162,10 @@ func (h *AddressHandler) DeleteAddress(c *fiber.Ctx) error {
 		})
 	}
 
-	return c.Status(fiber.StatusNoContent).JSON(nil)
+	return c.Status(fiber.StatusNoContent).JSON(fiber.Map{
+		"status":  "success",
+		"message": "Address deleted successfully",
+	})
 }
 
 // GetProvinces returns all provinces (public)

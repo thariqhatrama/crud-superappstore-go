@@ -13,10 +13,10 @@ import (
 
 // ==== Request DTO ====
 type CreateAddressRequest struct {
-	JudulAlamat  string
-	NamaPenerima string
-	NoTelp       string
-	DetailAlamat string
+	JudulAlamat  string `json:"judul_alamat"`
+	NamaPenerima string `json:"nama_penerima"`
+	NoTelp       string `json:"no_telp"`
+	DetailAlamat string `json:"detail_alamat"`
 }
 
 // ==== Interface ====
