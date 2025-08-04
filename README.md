@@ -174,6 +174,3 @@ Impor file `Rakamin Evermos Virtual Internship.postman_collection.json` ke Postm
 
 Jika ada pertanyaan, silakan hubungi saya pada email : thariqhatrama@gmail.com. Terima kasih!
 
-```
-::contentReference[oaicite:0]{index=0}
-```
