@@ -45,12 +45,11 @@ func NewTransactionService(
 }
 
 func (s *transactionService) Create(ctx context.Context, userID uint, req CreateTransactionRequest) (*models.Trx, error) {
-	var result *models.Trx
+	// tempID akan kita gunakan untuk reload
+	var tempID uint
 
 	err := config.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// 1. Generate kode invoice unik
 		invoiceCode := fmt.Sprintf("INV-%d-%d", time.Now().UnixNano(), userID)
-
 		now := time.Now()
 		trx := &models.Trx{
 			IDUser:           userID,
@@ -60,15 +59,13 @@ func (s *transactionService) Create(ctx context.Context, userID uint, req Create
 			CreatedAt:        now,
 			UpdatedAt:        now,
 		}
-		// simpan header transaksi
 		if err := tx.Create(trx).Error; err != nil {
 			return err
 		}
+		tempID = trx.ID
 
 		total := 0
-		// 2. Proses tiap item
 		for _, item := range req.Items {
-			// baca snapshot log produk
 			logEntry, err := s.productRepo.FindLogByID(ctx, item.LogProdukID)
 			if err != nil {
 				return err
@@ -77,8 +74,6 @@ func (s *transactionService) Create(ctx context.Context, userID uint, req Create
 			if err != nil {
 				return fmt.Errorf("invalid harga konsumen: %v", err)
 			}
-
-			// buat detail transaksi
 			detail := &models.DetailTrx{
 				IDTrx:       trx.ID,
 				IDLogProduk: logEntry.ID,
@@ -93,27 +88,28 @@ func (s *transactionService) Create(ctx context.Context, userID uint, req Create
 			}
 			total += detail.HargaTotal
 
-			// kurangi stok di produk
 			if err := s.productRepo.UpdateStock(ctx, logEntry.IDProduk, item.Kuantitas); err != nil {
 				return err
 			}
 		}
 
-		// 3. Update total harga dan timestamp
 		trx.HargaTotal = total
 		trx.UpdatedAt = time.Now()
 		if err := tx.Save(trx).Error; err != nil {
 			return err
 		}
-
-		result = trx
 		return nil
 	})
-
 	if err != nil {
 		return nil, err
 	}
-	return result, nil
+
+	// Setelah transaction commit, reload lengkap dengan DetailTrx
+	full, err := s.trxRepo.FindByID(ctx, userID, tempID)
+	if err != nil {
+		return nil, err
+	}
+	return full, nil
 }
 
 func (s *transactionService) List(ctx context.Context, userID uint, qs map[string]string) ([]*models.Trx, error) {
