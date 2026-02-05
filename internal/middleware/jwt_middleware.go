@@ -22,15 +22,31 @@ func JWTProtected() fiber.Handler {
 		}
 		tokenStr := parts[1]
 		token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
+			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, jwt.ErrSignatureInvalid
+			}
+			if t.Method != jwt.SigningMethodHS256 {
+				return nil, jwt.ErrSignatureInvalid
+			}
 			return config.JwtSecret, nil
 		})
 		if err != nil || !token.Valid {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid or expired token"})
 		}
-		claims := token.Claims.(jwt.MapClaims)
+		claims, ok := token.Claims.(jwt.MapClaims)
+		if !ok {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid or expired token"})
+		}
 		// set context locals
-		userID := uint(claims["user_id"].(float64))
-		isAdmin := claims["is_admin"].(bool)
+		userIDFloat, ok := claims["user_id"].(float64)
+		if !ok {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid or expired token"})
+		}
+		isAdmin, ok := claims["is_admin"].(bool)
+		if !ok {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid or expired token"})
+		}
+		userID := uint(userIDFloat)
 		c.Locals("user_id", userID)
 		c.Locals("is_admin", isAdmin)
 		return c.Next()
