@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"FinalTask/config"
 	"FinalTask/internal/models"
 	"FinalTask/internal/repository"
 	"FinalTask/utils"
@@ -67,15 +68,19 @@ func (s *authService) Register(ctx context.Context, req RegisterRequest) (*model
 	}
 
 	// ====== Hash password ======
-	hashed, _ := utils.HashPassword(req.Password)
+	hashed, err := utils.HashPassword(req.Password)
+	if err != nil {
+		return nil, err
+	}
 
 	// ====== Parsing tanggal lahir ======
 	var dob *time.Time
 	if req.TanggalLahir != "" {
 		parsed, err := time.Parse("2006-01-02", req.TanggalLahir)
-		if err == nil {
-			dob = &parsed
+		if err != nil {
+			return nil, errors.New("format tanggal_lahir tidak valid, gunakan YYYY-MM-DD")
 		}
+		dob = &parsed
 	}
 
 	// ====== Buat user baru ======
@@ -95,18 +100,23 @@ func (s *authService) Register(ctx context.Context, req RegisterRequest) (*model
 		UpdatedAt:    time.Now(),
 	}
 
-	if err := s.userRepo.Create(ctx, user); err != nil {
-		return nil, err
-	}
+	if err := config.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(user).Error; err != nil {
+			return err
+		}
 
-	// ====== Auto-create store ======
-	store := &models.Toko{
-		IDUser:    user.ID,
-		NamaToko:  req.Nama + "'s Store",
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-	}
-	if err := s.storeRepo.Create(ctx, store); err != nil {
+		// ====== Auto-create store ======
+		store := &models.Toko{
+			IDUser:    user.ID,
+			NamaToko:  req.Nama + "'s Store",
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		}
+		if err := tx.Create(store).Error; err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
 		return nil, err
 	}
 
